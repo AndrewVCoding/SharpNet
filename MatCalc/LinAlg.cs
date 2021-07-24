@@ -198,9 +198,6 @@ namespace LinAlg
         // Number of decimals to print out when displaying the matrix.
         private static int precision = 2;
 
-        // Threshold for Divide-and-Conquer matrix multiplaication algorithm
-        private static int threshold = 500;
-
         private static Random random = new Random();
 
         private double[,] matrix;
@@ -692,50 +689,10 @@ namespace LinAlg
             Matrix nmp = new Matrix(new double[,] { { A.size[0], A.size[1], B.size[1] } });
             int[] nmpMax = LinAlg.SimpleMax(nmp);
 
-            // If below the threshold
-            if (nmp[nmpMax[0], nmpMax[1]] < threshold)
-            {
-                for (int i = 0; i < A.Size()[0]; i++)
-                    for (int j = 0; j < B.Size()[1]; j++)
-                        for (int k = 0; k < A.Size()[1]; k++)
-                            result[i, j] += A[i, k] * B[k, j];
-            }
-
-            else
-            {
-                // If n is the maximum, split A horizontally
-                if (nmpMax[1] == 0)
-                {
-                    Matrix[] aSplit = Split(A, 0);
-                    Parallel.For(0, 2, i =>
-                    {
-                        aSplit[i] = aSplit[i] * B;
-                    });
-                    result = Combine(aSplit[0], aSplit[1], 0);
-                }
-
-                // If p is the maximum, split B horizontally
-                else if (nmpMax[1] == 2)
-                {
-                    Matrix[] bSplit = Split(B, 1);
-                    Parallel.For(0, 2, i =>
-                    {
-                        bSplit[i] = A * bSplit[i];
-                    });
-                    result = Combine(bSplit[0], bSplit[1], 1);
-                }
-
-                else
-                {
-                    Matrix[] aSplit = Split(A, 1);
-                    Matrix[] bSplit = Split(B, 0);
-                    Parallel.For(0, 2, i =>
-                    {
-                        result += aSplit[i] * bSplit[i];
-                    });
-                    //result = aSplit[0] * bSplit[0] + aSplit[1] * bSplit[1];
-                }
-            }
+            for (int i = 0; i < A.Size()[0]; i++)
+                for (int j = 0; j < B.Size()[1]; j++)
+                    for (int k = 0; k < A.Size()[1]; k++)
+                        result[i, j] += A[i, k] * B[k, j];
 
             return result;
         }
