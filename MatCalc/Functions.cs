@@ -119,34 +119,20 @@ namespace LinAlg
 
     public static class ErrorFunctions
     {
-        public static double MeansSquared(double x, double y)
-        {
-            return Math.Pow(x - y, 2);
-        }
-
-        public static double MeansSquared(Matrix a)
-        {
-            for (int i = 0; i < a.Size()[0]; i++)
-                for (int j = 0; j < a.Size()[1]; j++)
-                    a[i, j] = a[i, j] * a[i,j];
-
-            double result = (1.0 / a.Size()[0]) * LinAlg.Sum(a)[0,0];
-
-            return result;
-        }
-
         public static Matrix MeansSquared(Matrix a, Matrix b)
         {
-            Matrix difference = a - b;
+            Matrix difference = b - a;
 
             Matrix result = LinAlg.Hadamard(difference, difference);
+
+            result = LinAlg.Sum(result, 1) / a.size[1];
 
             return result;
         }
 
         public static Matrix MeansSquaredGrad(Matrix a, Matrix b)
         {
-            Matrix result = -2 * (a - b);
+            Matrix result = -2 * (b - a);
 
             return result;
         }

@@ -11,27 +11,123 @@ using LumenWorks.Framework.IO.Csv;
 class Program
 {
     static Random random = new Random(1234);
+    static System.Diagnostics.Stopwatch watch = new System.Diagnostics.Stopwatch();
 
-    static void Main(string[] args)
+    static void Main1(string[] args)
     {
-        var watch = new System.Diagnostics.Stopwatch();
+        // Load the mnist data set
+        Console.WriteLine("Loading Data...");
+        watch.Restart();
+        List<Matrix> data = LoadData("A:\\mnist\\mnist_train.csv", "A:\\mnist\\mnist_test.csv");
+        Matrix train_s = data[0];
+        Matrix train_y = data[1];
+        Matrix test_s = data[2];
+        Matrix test_y = data[3];
+        Console.WriteLine("Data loaded: {0}ms", watch.ElapsedMilliseconds);
+
+        // Create the neural network
+        Console.WriteLine("initializing network...");
+        watch.Restart();
+        List<Layer> layers = new List<Layer>();
+        layers.Add(new Dense(784, 100));
+        layers.Add(new ReLU());
+        layers.Add(new Dense(100, 200));
+        layers.Add(new ReLU());
+        layers.Add(new Dense(200, 10));
+        Network network = new Network(layers, ErrorFunctions.CrossEntropy, ErrorFunctions.CrossEntropyGrad, 0.01);
+        Console.WriteLine("network initialized in {0}ms\n", watch.ElapsedMilliseconds);
+
+        // Train the network
+        int batch_size = 32;
+        int num_batches = 50;
+        int num_epochs = 25;
+        double epoch_test_accuracy = 0.0;
+
+        for (int i = 1; i <= num_epochs; i++)
+        {
+            Console.WriteLine("Epoch {0}: ", i);
+            train(network, batch_size, num_batches, train_s, train_y);
+            epoch_test_accuracy = test(network, test_s, test_y);
+            Console.WriteLine("");
+        }
+        Console.ReadLine();
+    }
+
+    public static void train(Network network, int batch_size, int num_batches, Matrix train_s, Matrix train_y)
+    {
+        double batch_loss = 0.0;
+        long time = 0;
+
+        // network.t = 1;
+
+        Console.WriteLine("");
+
+        for (int n = 1; n <= num_batches; n++)
+        {
+            // Seperate the batch inputs
+            Matrix s = new Matrix(batch_size, train_s.Size()[1]);
+            // Seperate the batch labels
+            Matrix y = new Matrix(batch_size, train_y.Size()[1]);
+
+            int row = Convert.ToInt32(random.NextDouble() * train_s.Size()[0]);
+            for (int i = 0; i < batch_size; i++)
+            {
+                s.SetRow(i, train_s.GetRow(row));
+                y.SetRow(i, train_y.GetRow(row));
+                row = Convert.ToInt32(random.NextDouble() * train_y.Size()[0]);
+            }
+
+            watch.Restart();
+            batch_loss += network.Train(s, y);
+            watch.Stop();
+            time += watch.ElapsedMilliseconds;
+
+            Console.SetCursorPosition(0, Console.CursorTop - 1);
+            drawTextProgressBar(n*batch_size, num_batches*batch_size);
+            Console.WriteLine("Avg Loss: {0:N4}    time/batch: {1}ms", batch_loss/n, time/n);
+        }
+    }
+
+    public static double test(Network network, Matrix test_s, Matrix test_y)
+    {
+        double num_correct = 0.0;
+        int test_samples = 1000;
+        int t = 0;
+        Console.WriteLine("Testing\n");
+
+        for(int i = 1; i <= test_samples / 32; i++)
+        {
+            Parallel.For(0, 32, n =>
+            {
+                int row = Convert.ToInt32(random.NextDouble() * (test_y.Size()[0] - 1));
+                int prediction = Convert.ToInt16(network.OneHotPrediction(test_s.GetRow(row))[0, 0]);
+                int answer = Convert.ToInt16(LinAlg.LinAlg.Max(test_y.GetRow(row), 1)[0, 0]);
+                if (prediction == answer)
+                    num_correct += 1.0;
+                t++;
+            });
+
+            Console.SetCursorPosition(0, Console.CursorTop - 1);
+            drawTextProgressBar(t, test_samples);
+            Console.WriteLine("Accuracy: {0:N4}", num_correct / t);
+        }
+
+        return num_correct / (test_s.Size()[0] / test_samples);
+    }
+
+    public static List<Matrix> LoadData(string training_data, string test_data)
+    {
         // Create the identity matrix for label encoding
         Matrix labs = Matrix.Ident(10);
-
-        // Read the mnist training data
-        Console.WriteLine("Loading training dataset...");
-        watch.Restart();
         var traindataCSV = new DataTable();
-        using (var csvReader = new CsvReader(new StreamReader(System.IO.File.OpenRead(@"A:\mnist\mnist_train.csv")), true))
+
+        using (var csvReader = new CsvReader(new StreamReader(System.IO.File.OpenRead(@training_data)), true))
         {
             traindataCSV.Load(csvReader);
         }
-        Console.WriteLine("training data loaded in {0}ms\n", watch.ElapsedMilliseconds);
-
-        Console.WriteLine("transferring training data to matrix...");
 
         int total_stimuli = traindataCSV.Rows.Count;
-        watch.Restart();
+
         // Convert the training data into a matrix of inputs
         Matrix train_s = new Matrix(traindataCSV.Rows.Count, traindataCSV.Columns.Count - 1);
         Parallel.For(0, total_stimuli, i =>
@@ -48,20 +144,14 @@ class Program
             Matrix target = labs.GetRow(row);
             train_y.SetRow(i, target);
         });
-        Console.WriteLine("training data transferred in {0}ms\n", watch.ElapsedMilliseconds);
 
         // Read the mnist test data
         Console.WriteLine("Loading test dataset...");
-        watch.Restart();
         var testdataCSV = new DataTable();
-        using (var csvReader = new CsvReader(new StreamReader(System.IO.File.OpenRead(@"A:\mnist\mnist_test.csv")), true))
+        using (var csvReader = new CsvReader(new StreamReader(System.IO.File.OpenRead(@test_data)), true))
         {
             testdataCSV.Load(csvReader);
         }
-        Console.WriteLine("test data loaded in {0}ms\n", watch.ElapsedMilliseconds);
-
-        Console.WriteLine("transferring test data to matrix...");
-        watch.Restart();
         // Convert the test data into a matrix of inputs
         Matrix test_s = new Matrix(testdataCSV.Rows.Count, testdataCSV.Columns.Count - 1);
         Parallel.For(0, testdataCSV.Rows.Count, i =>
@@ -78,101 +168,8 @@ class Program
             Matrix target = labs.GetRow(row);
             test_y.SetRow(i, target);
         });
-        Console.WriteLine("test data transferred in {0}ms\n", watch.ElapsedMilliseconds);
 
-        Console.WriteLine("initializing network...");
-        watch.Restart();
-        // Create the neural network
-        List<Layer> layers = new List<Layer>();
-        layers.Add(new Dense(784, 100));
-        layers.Add(new ReLU());
-        layers.Add(new Dense(100, 200));
-        layers.Add(new ReLU());
-        layers.Add(new Dense(200, 10));
-        //layers.Add(new Sigmoid());
-
-        Network network = new Network(layers, 0.05);
-        Console.WriteLine("network initialized in {0}ms\n", watch.ElapsedMilliseconds);
-
-        // Train the network
-        int batch_size = 100;
-        int num_batches = 50;
-        int num_epochs = 20;
-
-        double epoch_test_accuracy = 0.0;
-
-        for (int i = 1; i <= num_epochs; i++)
-        {
-            Console.WriteLine("Epoch {0}: ", i);
-            train(network, batch_size, num_batches, train_s, train_y);
-            epoch_test_accuracy = test(network, test_s, test_y);
-            Console.WriteLine("");
-        }
-        
-        Console.ReadLine();
-    }
-
-    public static void train(Network network, int batch_size, int num_batches, Matrix train_s, Matrix train_y)
-    {
-        var watch = new System.Diagnostics.Stopwatch();
-        double batch_loss = 0.0;
-        long time = 0;
-
-        network.t = 1;
-
-        Console.WriteLine("");
-
-        for (int n = 1; n <= num_batches; n++)
-        {
-            // Seperate the batch inputs
-            Matrix s = new Matrix(batch_size, train_s.Size()[1]);
-            // Seperate the batch labels
-            Matrix y = new Matrix(batch_size, train_y.Size()[1]);
-
-            int row = Convert.ToInt32(random.NextDouble() * train_s.Size()[0]);
-            for (int i = 0; i < batch_size; i++)
-            {
-                s.SetRow(i, train_s.GetRow(i));
-                y.SetRow(i, train_y.GetRow(i));
-                row = Convert.ToInt32(random.NextDouble() * train_y.Size()[0]);
-            }
-
-            watch.Restart();
-            batch_loss += network.Train(s, y);
-            watch.Stop();
-            time += watch.ElapsedMilliseconds;
-
-            Console.SetCursorPosition(0, Console.CursorTop - 1);
-            drawTextProgressBar(n, num_batches);
-            Console.WriteLine("Avg Loss: {0:N4}    time/batch: {1}ms", batch_loss/n, time/n);
-        }
-    }
-
-    public static double test(Network network, Matrix test_s, Matrix test_y)
-    {
-        double num_correct = 0.0;
-        int test_samples = 3200;
-        int t = 0;
-        Console.WriteLine("Testing\n");
-
-        for(int i = 1; i <= test_samples / 32; i++)
-        {
-            Parallel.For(0, 32, n =>
-            {
-                int row = Convert.ToInt32(random.NextDouble() * (test_y.Size()[0] - 1));
-                int prediction = Convert.ToInt16(network.predict(test_s.GetRow(row))[0, 0]);
-                int answer = Convert.ToInt16(LinAlg.LinAlg.Max(test_y.GetRow(row), 1)[0, 0]);
-                if (prediction == answer)
-                    num_correct += 1.0;
-                t++;
-            });
-
-            Console.SetCursorPosition(0, Console.CursorTop - 1);
-            drawTextProgressBar(t, test_samples);
-            Console.WriteLine("Accuracy: {0:N4}", num_correct / t);
-        }
-
-        return num_correct / (test_s.Size()[0] / test_samples);
+        return new List<Matrix>() { train_s, train_y, test_s, test_y };
     }
 
     public static void ClearCurrentConsoleLine()
